@@ -6,13 +6,22 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_ZSTDDEC (gst_zstddec_get_type())
+#define GST_TYPE_MULTIDEC (gst_multidec_get_type())
+#define GST_TYPE_MULTIDEC_FORMAT (gst_multidec_format_get_type())
+
+typedef enum {
+  GST_MULTIDEC_FORMAT_AUTO = 0,
+  GST_MULTIDEC_FORMAT_ZSTD,
+  GST_MULTIDEC_FORMAT_GZIP,
+  GST_MULTIDEC_FORMAT_BZIP2
+} GstMultiDecFormat;
 
 typedef struct _GstMultiDec GstMultiDec;
-typedef struct _GstMultiDecClass GstMultiDecClass;
+typedef struct _GstMultiDecClass GstZstdDecClass;
 
 struct _GstMultiDec {
   GstBaseTransform parent;
+  GstMultiDecFormat format;
 };
 
 struct _GstMultiDecClass {
