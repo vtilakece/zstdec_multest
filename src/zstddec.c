@@ -1,4 +1,5 @@
 #include <gst/gst.h>
+#include <inttypes.h>
 #include <unistd.h>
 #include <gst/base/gstbasetransform.h>
 
@@ -34,9 +35,60 @@ GST_STATIC_PAD_TEMPLATE(
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS_ANY);
 
+
+static GstFlowReturn
+gst_zstddec_prepare_output_buffer(GstBaseTransform *base,
+                                  GstBuffer *inbuf,
+                                  GstBuffer **outbuf)
+{
+  GstMapInfo inmap;
+  unsigned long long frame_size = 0;
+
+  (void)base;
+
+  if (!gst_buffer_map(inbuf, &inmap, GST_MAP_READ)) {
+    g_printerr("zstddec: failed to map input buffer in prepare_output_buffer\n");
+    return GST_FLOW_ERROR;
+  }
+
+  frame_size = ZSTD_getFrameContentSize(inmap.data, inmap.size);
+
+  if (frame_size == ZSTD_CONTENTSIZE_ERROR) {
+    g_printerr("zstddec: not a valid zstd frame, or buffer too small\n");
+    gst_buffer_unmap(inbuf, &inmap);
+    return GST_FLOW_ERROR;
+  }
+
+  if (frame_size == ZSTD_CONTENTSIZE_UNKNOWN) {
+    g_printerr("zstddec: valid zstd frame, but decompressed size is unknown\n");
+    gst_buffer_unmap(inbuf, &inmap);
+    return GST_FLOW_ERROR;
+  }
+
+  if (frame_size == 0 || frame_size > 100 * 1024 * 1024) {
+    g_printerr("zstddec: suspicious frame size: %llu\n", frame_size);
+    gst_buffer_unmap(inbuf, &inmap);
+    return GST_FLOW_ERROR;
+  }
+ //TODO: Check if the frame_size/outbuf  needs padding offsets... 
+  *outbuf = gst_buffer_new_allocate(NULL, (gsize)frame_size, NULL);
+
+  g_print("zstddec-preparing outbuf: Allocated output buffer: frame size is %llu bytes\n", frame_size);
+
+  if (*outbuf == NULL) {
+    g_printerr("zstddec: failed to allocate output buffer of %llu bytes\n",
+               frame_size);
+    gst_buffer_unmap(inbuf, &inmap);
+    return GST_FLOW_ERROR;
+  }
+
+  gst_buffer_unmap(inbuf, &inmap);
+  return GST_FLOW_OK;
+}
+
 /* For now: just pass buffers through unchanged */
 static GstFlowReturn
-gst_zstddec_transform_ip(GstBaseTransform *base, GstBuffer *buf)
+gst_zstddec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbuf)
 {
   (void)(base);
   //(void)(buf);
@@ -55,37 +107,41 @@ gst_zstddec_transform_ip(GstBaseTransform *base, GstBuffer *buf)
   }
 #endif
 
+  GstMapInfo inmap;
+  GstMapInfo outmap;
+  size_t ret = 0;
+
   /* no-op passthrough */
-
-  /* Adding a check if the buffer is a valid zstd buffer with the help of zstd API */
-  GstMapInfo map;
-  // ZSTD_getFrameContentSize uses unsigned long long.. 
-  unsigned long long frame_size;
-
-  if (!gst_buffer_map(buf, &map, GST_MAP_READ)) {
+  if (!gst_buffer_map(inbuf, &inmap, GST_MAP_READ)) {
     g_printerr("zstddec: failed to map input buffer\n");
     return GST_FLOW_ERROR;
   }
 
-  g_print("zstddec: got buffer of %zu bytes\n", map.size);
-
-  //Check on https://facebook.github.io/zstd/zstd_manual.html for the API calls ...
-
-  frame_size = ZSTD_getFrameContentSize(map.data, map.size);
-
-  if (frame_size == ZSTD_CONTENTSIZE_ERROR) {
-    g_print("zstddec: not a valid zstd frame, or buffer too small\n");
-  } else if (frame_size == ZSTD_CONTENTSIZE_UNKNOWN) {
-    g_print("zstddec: valid zstd frame, but decompressed size is unknown\n");
-  } else {
-    g_print("zstddec: valid zstd frame, decompressed size = %llu bytes\n",
-            frame_size);
+  if (!gst_buffer_map(outbuf, &outmap, GST_MAP_WRITE)) {
+    g_printerr("zstddec: failed to map output buffer\n");
+    gst_buffer_unmap(inbuf, &inmap);
+    return GST_FLOW_ERROR;
   }
 
-  gst_buffer_unmap(buf, &map);
+  ret = ZSTD_decompress(outmap.data, outmap.size, inmap.data, inmap.size);
+
+  if (ZSTD_isError(ret)) {
+    g_printerr("zstddec: decompress failed: %s\n", ZSTD_getErrorName(ret));
+    gst_buffer_unmap(outbuf, &outmap);
+    gst_buffer_unmap(inbuf, &inmap);
+    return GST_FLOW_ERROR;
+  }
+
+  g_print("zstddec: decompressed successfully: %zu bytes\n", ret);
+
+  gst_buffer_unmap(outbuf, &outmap);
+  gst_buffer_unmap(inbuf, &inmap);
 
   return GST_FLOW_OK;
-}
+  }
+
+
+  
 
 static void
 gst_zstddec_class_init(GstZstdDecClass *klass)
@@ -111,8 +167,11 @@ gst_zstddec_class_init(GstZstdDecClass *klass)
       element_class,
       gst_static_pad_template_get(&src_template));
 
-  /* in-place transform: input buffer is forwarded unchanged */
-  trans_class->transform_ip = gst_zstddec_transform_ip;
+  /* Replace in-place transform to allow modifications to out buffer*/
+  //trans_class->transform = gst_zstddec_transform;
+  // Prepare output buffer needed to be implemented to allocate the output buffer of the right size for the decompressed data. This is required since we are not doing in-place transformation and need to create a new buffer for the output.
+  trans_class->prepare_output_buffer = gst_zstddec_prepare_output_buffer;
+  trans_class->transform = gst_zstddec_transform;
 }
 
 static void
@@ -123,8 +182,8 @@ gst_zstddec_init(GstZstdDec *self)
 
     //This ensures no new buf create and or copy needed..  set_in_place ad passthrough... 
 
-  gst_base_transform_set_in_place(GST_BASE_TRANSFORM(self), TRUE);
-  gst_base_transform_set_passthrough(GST_BASE_TRANSFORM(self), TRUE);
+ gst_base_transform_set_in_place(GST_BASE_TRANSFORM(self), FALSE);
+ gst_base_transform_set_passthrough(GST_BASE_TRANSFORM(self), FALSE);
 }
 
 
