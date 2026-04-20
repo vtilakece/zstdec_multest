@@ -5,8 +5,13 @@ zstd_dep = dependency('libzstd', required : true)
 # optional extra-credit deps
 zlib_dep = dependency('zlib', required : false)
 
-# bzip2 pkg-config naming can vary by environment, so try the common one first
+cc = meson.get_compiler('c')
+
+# Try pkg-config/CMake first; fall back to linking libbz2 directly.
 bzip2_dep = dependency('bzip2', required : false)
+if not bzip2_dep.found()
+  bzip2_dep = cc.find_library('bz2', required : false)
+endif
 
 deps = [gst_dep, gstbase_dep, zstd_dep]
 cargs = ['-DHAVE_ZSTD=1']

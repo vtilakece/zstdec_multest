@@ -29,7 +29,7 @@
 /*Guard to check max decomporessed size */
 #define MAX_DECOMPRESSED_SIZE (100 * 1024 * 1024) // 100 MB
 
-G_DEFINE_TYPE(GstZstdDec, gst_zstddec, GST_TYPE_BASE_TRANSFORM)
+G_DEFINE_TYPE(GstMultiDec, gst_multidec, GST_TYPE_BASE_TRANSFORM)
 
 /* Accept any bytes or bufferin, and same buffer out */
 static GstStaticPadTemplate sink_template =
@@ -48,7 +48,7 @@ GST_STATIC_PAD_TEMPLATE(
 
 
 static GstFlowReturn
-gst_zstddec_prepare_output_buffer(GstBaseTransform *base,
+gst_multidec_prepare_output_buffer(GstBaseTransform *base,
                                   GstBuffer *inbuf,
                                   GstBuffer **outbuf)
 {
@@ -76,7 +76,6 @@ gst_zstddec_prepare_output_buffer(GstBaseTransform *base,
     return GST_FLOW_ERROR;
   }
    
-  frame_size_garbage = frame_size*10; // Arbitrary large size to catch suspicious frame sizes that could lead to memory issues. Adjust as needed based on expected use cases.   
   if (frame_size == 0 || frame_size > MAX_DECOMPRESSED_SIZE ) {
     g_printerr("zstddec: suspicious frame size: %llu\n", frame_size);
     gst_buffer_unmap(inbuf, &inmap);
@@ -102,7 +101,7 @@ gst_zstddec_prepare_output_buffer(GstBaseTransform *base,
 
 /* For now: just pass buffers through unchanged */
 static GstFlowReturn
-gst_zstddec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbuf)
+gst_multidec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbuf)
 {
   (void)(base);
   //(void)(buf);
@@ -111,6 +110,18 @@ gst_zstddec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbu
   if (g_once_init_enter(&once)) {
     g_print("zstddec loaded, libzstd header version: %u\n",
             ZSTD_versionNumber());
+     
+#ifdef HAVE_ZLIB
+g_print("zlib version: %s\n", zlibVersion());
+#else
+g_print("zstddec built without zlib support\n");
+#endif
+
+#ifdef HAVE_BZIP2
+g_print("bzip2 version: found \n");
+#else
+    g_print("zstddec built without bzip2 support\n");
+#endif       
     g_once_init_leave(&once, 1);
   }
 #else
@@ -120,6 +131,8 @@ gst_zstddec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbu
     g_once_init_leave(&once, 1);
   }
 #endif
+
+
 
   GstMapInfo inmap;
   GstMapInfo outmap;
@@ -154,11 +167,8 @@ gst_zstddec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbu
   return GST_FLOW_OK;
   }
 
-
-  
-
 static void
-gst_zstddec_class_init(GstZstdDecClass *klass)
+gst_multidec_class_init(GstMultiDecClass *klass)
 {
    g_print("CLASS INIT pid=%d\n", getpid());
 
@@ -168,7 +178,7 @@ gst_zstddec_class_init(GstZstdDecClass *klass)
 
   gst_element_class_set_static_metadata(
       element_class,
-      "Zstd passthrough decoder",
+      "Multidec passthrough decoder",
       "Filter/Decoder",
       "zstddec element test: passes buffers through unchanged",
       "Tilak");
@@ -184,12 +194,12 @@ gst_zstddec_class_init(GstZstdDecClass *klass)
   /* Replace in-place transform to allow modifications to out buffer*/
   //trans_class->transform = gst_zstddec_transform;
   // Prepare output buffer needed to be implemented to allocate the output buffer of the right size for the decompressed data. This is required since we are not doing in-place transformation and need to create a new buffer for the output.
-  trans_class->prepare_output_buffer = gst_zstddec_prepare_output_buffer;
-  trans_class->transform = gst_zstddec_transform;
+  trans_class->prepare_output_buffer = gst_multidec_prepare_output_buffer;
+  trans_class->transform = gst_multidec_transform;
 }
 
 static void
-gst_zstddec_init(GstZstdDec *self)
+gst_multidec_init(GstMultiDec *self)
 {
    //g_print("INSTANCE INIT\n");
    g_print("INSTANCE INIT pid=%d\n", getpid());
@@ -204,7 +214,7 @@ gst_zstddec_init(GstZstdDec *self)
 static gboolean
 plugin_init(GstPlugin *plugin)
 {
-  return gst_element_register(plugin, "zstddec", GST_RANK_NONE, gst_zstddec_get_type());
+  return gst_element_register(plugin, "multidec", GST_RANK_NONE, gst_multidec_get_type());
 }
 
 
