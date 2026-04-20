@@ -1,5 +1,5 @@
-#ifndef __GST_ZSTDDEC_H__
-#define __GST_ZSTDDEC_H__
+#ifndef __GST_MULTIDEC_H__
+#define __GST_MULTIDEC_H__
 
 #include <gst/gst.h>
 #include <gst/base/gstbasetransform.h>
@@ -11,16 +11,15 @@ G_BEGIN_DECLS
 typedef struct _GstZstdDec GstZstdDec;
 typedef struct _GstZstdDecClass GstZstdDecClass;
 
-struct _GstZstdDec {
+struct _GstMultiDec {
   GstBaseTransform parent;
 };
 
-struct _GstZstdDecClass {
+struct _GstMultiDecClass {
   GstBaseTransformClass parent_class;
 };
 
-GType gst_zstddec_get_type(void);
-
+GType gst_multidec_get_type(void);
 G_END_DECLS
 
 #endif

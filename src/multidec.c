@@ -3,19 +3,28 @@
 #include <unistd.h>
 #include <gst/base/gstbasetransform.h>
 
-#include "../include/zstddec.h"
+#include "../include/multidec.h"
 
 #ifndef PACKAGE
-#define PACKAGE "zstddec"
+#define PACKAGE "multidec"
 #endif
 
 
-#define PACKAGE_NAME "zstddec"
+#define PACKAGE_NAME "multidec"
 #define GST_PACKAGE_ORIGIN "https://sometest-website.com"
 
 #ifdef HAVE_ZSTD
 #include <zstd.h>
 #endif
+
+#ifdef HAVE_ZLIB
+#include <zlib.h>
+#endif
+
+#ifdef HAVE_BZIP2
+#include <bzlib.h>
+#endif
+
 
 /*Guard to check max decomporessed size */
 #define MAX_DECOMPRESSED_SIZE (100 * 1024 * 1024) // 100 MB
@@ -202,8 +211,8 @@ plugin_init(GstPlugin *plugin)
 GST_PLUGIN_DEFINE(
     GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    zstddec,   // the plugin name GStreamer uses
-    "Simple zstddec plugin that passes the data from the compressed zstd file and does nothing else with it",
+    multidec,   // the plugin name for multidec 
+    "Simple multidec plugin that parses the comporessed data from zstd or  zlib or bzip file and does nothing else with it",
     plugin_init,
     "0.1.0",
     "LGPL",

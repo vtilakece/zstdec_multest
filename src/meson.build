@@ -1,32 +1,34 @@
 gst_dep = dependency('gstreamer-1.0', required : true)
-# Base transform to pass through data as a filtr 
 gstbase_dep = dependency('gstreamer-base-1.0', required : true)
-
-
-# Optional for later use.
-# If libzstd is installed with pkg-config support, Meson will find it.
 zstd_dep = dependency('libzstd', required : true)
 
-# This is to find the deps at compile time
-deps = [gst_dep, gstbase_dep, zstd_dep ]
-cargs = []
+# optional extra-credit deps
+zlib_dep = dependency('zlib', required : false)
 
-if zstd_dep.found()
-  deps += zstd_dep
-  cargs += ['-DHAVE_ZSTD=1']
+# bzip2 pkg-config naming can vary by environment, so try the common one first
+bzip2_dep = dependency('bzip2', required : false)
+
+deps = [gst_dep, gstbase_dep, zstd_dep]
+cargs = ['-DHAVE_ZSTD=1']
+
+if zlib_dep.found()
+  deps += zlib_dep
+  cargs += ['-DHAVE_ZLIB=1']
 endif
 
-# Build a GStreamer plugin shared object.
+if bzip2_dep.found()
+  deps += bzip2_dep
+  cargs += ['-DHAVE_BZIP2=1']
+endif
+
 incdir = include_directories('../include')
 
 shared_module(
-  'zstddec',
-  'zstddec.c',
+  'multidec',
+  'multidec.c',
   include_directories : incdir,
   dependencies : deps,
   c_args : cargs,
   install : true,
-  # Incase of manual gstreamer plugin, for later: -Dgstreamer_plugin_dir=/some/path
   install_dir : get_option('libdir') / 'gstreamer-1.0',
 )
-
