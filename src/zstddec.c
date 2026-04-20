@@ -39,7 +39,7 @@ static GstFlowReturn
 gst_zstddec_transform_ip(GstBaseTransform *base, GstBuffer *buf)
 {
   (void)(base);
-  (void)(buf);
+  //(void)(buf);
 #ifdef HAVE_ZSTD
   static gsize once = 0;
   if (g_once_init_enter(&once)) {
@@ -56,6 +56,34 @@ gst_zstddec_transform_ip(GstBaseTransform *base, GstBuffer *buf)
 #endif
 
   /* no-op passthrough */
+
+  /* Adding a check if the buffer is a valid zstd buffer with the help of zstd API */
+  GstMapInfo map;
+  // ZSTD_getFrameContentSize uses unsigned long long.. 
+  unsigned long long frame_size;
+
+  if (!gst_buffer_map(buf, &map, GST_MAP_READ)) {
+    g_printerr("zstddec: failed to map input buffer\n");
+    return GST_FLOW_ERROR;
+  }
+
+  g_print("zstddec: got buffer of %zu bytes\n", map.size);
+
+  //Check on https://facebook.github.io/zstd/zstd_manual.html for the API calls ...
+
+  frame_size = ZSTD_getFrameContentSize(map.data, map.size);
+
+  if (frame_size == ZSTD_CONTENTSIZE_ERROR) {
+    g_print("zstddec: not a valid zstd frame, or buffer too small\n");
+  } else if (frame_size == ZSTD_CONTENTSIZE_UNKNOWN) {
+    g_print("zstddec: valid zstd frame, but decompressed size is unknown\n");
+  } else {
+    g_print("zstddec: valid zstd frame, decompressed size = %llu bytes\n",
+            frame_size);
+  }
+
+  gst_buffer_unmap(buf, &map);
+
   return GST_FLOW_OK;
 }
 
