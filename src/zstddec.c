@@ -110,7 +110,7 @@ plugin_init(GstPlugin *plugin)
 GST_PLUGIN_DEFINE(
     GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    zstddec,   // 👈 this is the plugin name GStreamer use s
+    zstddec,   // the plugin name GStreamer uses
     "Simple zstddec plugin that passes the data from the compressed zstd file and does nothing else with it",
     plugin_init,
     "0.1.0",
