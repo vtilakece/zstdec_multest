@@ -17,6 +17,8 @@
 #include <zstd.h>
 #endif
 
+/*Guard to check max decomporessed size */
+#define MAX_DECOMPRESSED_SIZE (100 * 1024 * 1024) // 100 MB
 
 G_DEFINE_TYPE(GstZstdDec, gst_zstddec, GST_TYPE_BASE_TRANSFORM)
 
@@ -64,14 +66,17 @@ gst_zstddec_prepare_output_buffer(GstBaseTransform *base,
     gst_buffer_unmap(inbuf, &inmap);
     return GST_FLOW_ERROR;
   }
-
-  if (frame_size == 0 || frame_size > 100 * 1024 * 1024) {
+   
+  frame_size_garbage = frame_size*10; // Arbitrary large size to catch suspicious frame sizes that could lead to memory issues. Adjust as needed based on expected use cases.   
+  if (frame_size == 0 || frame_size > MAX_DECOMPRESSED_SIZE ) {
     g_printerr("zstddec: suspicious frame size: %llu\n", frame_size);
     gst_buffer_unmap(inbuf, &inmap);
     return GST_FLOW_ERROR;
   }
  //TODO: Check if the frame_size/outbuf  needs padding offsets... 
   *outbuf = gst_buffer_new_allocate(NULL, (gsize)frame_size, NULL);
+  if (*outbuf == NULL) 
+  g_printerr("zstddec: failed to allocate output buffer of %llu bytes\n", frame_size);
 
   g_print("zstddec-preparing outbuf: Allocated output buffer: frame size is %llu bytes\n", frame_size);
 
@@ -131,7 +136,7 @@ gst_zstddec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbu
     gst_buffer_unmap(inbuf, &inmap);
     return GST_FLOW_ERROR;
   }
-
+  
   g_print("zstddec: decompressed successfully: %zu bytes\n", ret);
 
   gst_buffer_unmap(outbuf, &outmap);

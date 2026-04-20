@@ -5,9 +5,10 @@ gstbase_dep = dependency('gstreamer-base-1.0', required : true)
 
 # Optional for later use.
 # If libzstd is installed with pkg-config support, Meson will find it.
-zstd_dep = dependency('libzstd', required : false)
+zstd_dep = dependency('libzstd', required : true)
 
-deps = [gst_dep, gstbase_dep]
+# This is to find the deps at compile time
+deps = [gst_dep, gstbase_dep, zstd_dep ]
 cargs = []
 
 if zstd_dep.found()
