@@ -22,6 +22,7 @@ typedef struct _GstMultiDecClass GstMultiDecClass;
 struct _GstMultiDec {
   GstBaseTransform parent;
   GstMultiDecFormat format;
+  gsize expected_outbuf_size;
 };
 
 struct _GstMultiDecClass {

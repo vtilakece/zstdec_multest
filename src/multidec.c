@@ -15,10 +15,49 @@
 
 #ifdef HAVE_ZSTD
 #include <zstd.h>
+// https://facebook.github.io/zstd/zstd_manual.html for zstd decompression APIs
 #endif
 
 #ifdef HAVE_ZLIB
 #include <zlib.h>
+//See https://www.zlib.net/manual.html for zlib decompression APIs 
+
+static gboolean gst_multidec_gzip_decompress(const guint8 *src,
+                             gsize src_size,
+                             guint8 *dst,
+                             gsize dst_capacity,
+                             gsize *dst_size)
+{
+  z_stream strm;
+  int zret;
+
+  memset(&strm, 0, sizeof(strm));
+  strm.next_in = (Bytef *)src;
+  strm.avail_in = (uInt)src_size;
+  strm.next_out = dst;
+  strm.avail_out = (uInt)dst_capacity;
+
+  /* 16 + MAX_WBITS => gzip decoding */
+  zret = inflateInit2(&strm, 16 + MAX_WBITS);
+  if (zret != Z_OK) {
+    g_printerr("multidec: inflateInit2 failed: %d\n", zret);
+    return FALSE;
+  }
+
+  zret = inflate(&strm, Z_FINISH);
+
+  if (zret != Z_STREAM_END) {
+    g_printerr("multidec: inflate failed: %d\n", zret);
+    inflateEnd(&strm);
+    return FALSE;
+  }
+
+  *dst_size = (gsize)strm.total_out;
+
+  inflateEnd(&strm);
+  return TRUE;
+}
+
 #endif
 
 #ifdef HAVE_BZIP2
@@ -92,139 +131,214 @@ GST_STATIC_PAD_TEMPLATE(
 
 static GstFlowReturn
 gst_multidec_prepare_output_buffer(GstBaseTransform *base,
-                                  GstBuffer *inbuf,
-                                  GstBuffer **outbuf)
+                                   GstBuffer *inbuf,
+                                   GstBuffer **outbuf)
 {
   GstMapInfo inmap;
   unsigned long long frame_size = 0;
+  GstMultiDec *self = (GstMultiDec *)base;
 
-  GstMultiDec *self = (GstMultiDec *)base;  
+  if (!gst_buffer_map(inbuf, &inmap, GST_MAP_READ)) {
+    g_printerr("multidec: failed to map input buffer in prepare_output_buffer\n");
+    return GST_FLOW_ERROR;
+  }
 
   switch (self->format) {
     case GST_MULTIDEC_FORMAT_AUTO:
       g_print("multidec: format=auto\n");
-      break;
+      /* later: detect from header */
+      gst_buffer_unmap(inbuf, &inmap);
+      g_printerr("multidec: auto detect not implemented yet\n");
+      return GST_FLOW_ERROR;
+
     case GST_MULTIDEC_FORMAT_ZSTD:
       g_print("multidec: format=zstd\n");
+#ifdef HAVE_ZSTD
+      frame_size = ZSTD_getFrameContentSize(inmap.data, inmap.size);
+
+      if (frame_size == ZSTD_CONTENTSIZE_ERROR) {
+        g_printerr("multidec: not a valid zstd frame, or buffer too small\n");
+        gst_buffer_unmap(inbuf, &inmap);
+        return GST_FLOW_ERROR;
+      }
+
+      if (frame_size == ZSTD_CONTENTSIZE_UNKNOWN) {
+        g_printerr("multidec: valid zstd frame, but decompressed size is unknown\n");
+        gst_buffer_unmap(inbuf, &inmap);
+        return GST_FLOW_ERROR;
+      }
+
+      if (frame_size == 0 || frame_size > MAX_DECOMPRESSED_SIZE) {
+        g_printerr("multidec: suspicious zstd frame size: %llu\n", frame_size);
+        gst_buffer_unmap(inbuf, &inmap);
+        return GST_FLOW_ERROR;
+      }
+
+      self->expected_outbuf_size = (gsize)frame_size;
+#else
+      gst_buffer_unmap(inbuf, &inmap);
+      g_printerr("multidec: built without zstd support\n");
+      return GST_FLOW_ERROR;
+#endif
       break;
+
     case GST_MULTIDEC_FORMAT_GZIP:
       g_print("multidec: format=gzip\n");
+#ifdef HAVE_ZLIB
+      self->expected_outbuf_size = MAX_DECOMPRESSED_SIZE;
+#else
+      gst_buffer_unmap(inbuf, &inmap);
+      g_printerr("multidec: built without zlib support\n");
+      return GST_FLOW_ERROR;
+#endif
       break;
+
     case GST_MULTIDEC_FORMAT_BZIP2:
       g_print("multidec: format=bzip2\n");
+#ifdef HAVE_BZIP2
+      self->expected_outbuf_size = MAX_DECOMPRESSED_SIZE;
+#else
+      gst_buffer_unmap(inbuf, &inmap);
+      g_printerr("multidec: built without bzip2 support\n");
+      return GST_FLOW_ERROR;
+#endif
       break;
+
     default:
       gst_buffer_unmap(inbuf, &inmap);
       return GST_FLOW_ERROR;
-  }    
-  (void)base;
-
-  if (!gst_buffer_map(inbuf, &inmap, GST_MAP_READ)) {
-    g_printerr("zstddec: failed to map input buffer in prepare_output_buffer\n");
-    return GST_FLOW_ERROR;
   }
 
-  frame_size = ZSTD_getFrameContentSize(inmap.data, inmap.size);
-
-  if (frame_size == ZSTD_CONTENTSIZE_ERROR) {
-    g_printerr("zstddec: not a valid zstd frame, or buffer too small\n");
-    gst_buffer_unmap(inbuf, &inmap);
-    return GST_FLOW_ERROR;
-  }
-
-  if (frame_size == ZSTD_CONTENTSIZE_UNKNOWN) {
-    g_printerr("zstddec: valid zstd frame, but decompressed size is unknown\n");
-    gst_buffer_unmap(inbuf, &inmap);
-    return GST_FLOW_ERROR;
-  }
-   
-  if (frame_size == 0 || frame_size > MAX_DECOMPRESSED_SIZE ) {
-    g_printerr("zstddec: suspicious frame size: %llu\n", frame_size);
-    gst_buffer_unmap(inbuf, &inmap);
-    return GST_FLOW_ERROR;
-  }
- //TODO: Check if the frame_size/outbuf  needs padding offsets... 
-  *outbuf = gst_buffer_new_allocate(NULL, (gsize)frame_size, NULL);
-  if (*outbuf == NULL) 
-  g_printerr("zstddec: failed to allocate output buffer of %llu bytes\n", frame_size);
-
-  g_print("zstddec-preparing outbuf: Allocated output buffer: frame size is %llu bytes\n", frame_size);
-
+  *outbuf = gst_buffer_new_allocate(NULL, self->expected_outbuf_size, NULL);
   if (*outbuf == NULL) {
-    g_printerr("zstddec: failed to allocate output buffer of %llu bytes\n",
-               frame_size);
+    g_printerr("multidec: failed to allocate output buffer of %zu bytes\n",
+               self->expected_outbuf_size);
     gst_buffer_unmap(inbuf, &inmap);
     return GST_FLOW_ERROR;
   }
+
+  g_print("multidec: allocated output buffer of %zu bytes\n",
+          self->expected_outbuf_size);
 
   gst_buffer_unmap(inbuf, &inmap);
   return GST_FLOW_OK;
 }
 
 /* For now: just pass buffers through unchanged */
-static GstFlowReturn gst_multidec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbuf)
+static GstFlowReturn
+gst_multidec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbuf)
 {
-  (void)(base);
-  //(void)(buf);
-#ifdef HAVE_ZSTD
-  static gsize once = 0;
-  if (g_once_init_enter(&once)) {
-    g_print("zstddec loaded, libzstd header version: %u\n",
-            ZSTD_versionNumber());
-     
-#ifdef HAVE_ZLIB
-g_print("zlib version: %s\n", zlibVersion());
-#else
-g_print("zstddec built without zlib support\n");
-#endif
-
-#ifdef HAVE_BZIP2
-g_print("bzip2 version: found \n");
-#else
-    g_print("zstddec built without bzip2 support\n");
-#endif       
-    g_once_init_leave(&once, 1);
-  }
-#else
-  static gsize once = 0;
-  if (g_once_init_enter(&once)) {
-    g_print("zstddec loaded, built without zstd support\n");
-    g_once_init_leave(&once, 1);
-  }
-#endif
-
+  GstMultiDec *self = (GstMultiDec *)base;
   GstMapInfo inmap;
   GstMapInfo outmap;
   size_t ret = 0;
 
-  /* no-op passthrough */
+  static gsize once = 0;
+  if (g_once_init_enter(&once)) {
+#ifdef HAVE_ZSTD
+    g_print("multidec: libzstd header version: %u\n", ZSTD_versionNumber());
+#else
+    g_print("multidec: built without zstd support\n");
+#endif
+
+#ifdef HAVE_ZLIB
+    g_print("multidec: zlib version: %s\n", zlibVersion());
+#else
+    g_print("multidec: built without zlib support\n");
+#endif
+
+#ifdef HAVE_BZIP2
+    g_print("multidec: bzip2 support found\n");
+#else
+    g_print("multidec: built without bzip2 support\n");
+#endif
+
+    g_once_init_leave(&once, 1);
+  }
+
   if (!gst_buffer_map(inbuf, &inmap, GST_MAP_READ)) {
-    g_printerr("zstddec: failed to map input buffer\n");
+    g_printerr("multidec: failed to map input buffer\n");
     return GST_FLOW_ERROR;
   }
-  g_print("outbuf size is %zu bytes and inbuf size is %zu bytes\n", gst_buffer_get_size(outbuf), gst_buffer_get_size(inbuf));
+
   if (!gst_buffer_map(outbuf, &outmap, GST_MAP_WRITE)) {
-    g_printerr("zstddec: failed to map output buffer\n");
+    g_printerr("multidec: failed to map output buffer\n");
     gst_buffer_unmap(inbuf, &inmap);
     return GST_FLOW_ERROR;
   }
 
-  ret = ZSTD_decompress(outmap.data, outmap.size, inmap.data, inmap.size);
+  g_print("multidec: outbuf size=%zu inbuf size=%zu\n",
+          gst_buffer_get_size(outbuf),
+          gst_buffer_get_size(inbuf));
 
-  if (ZSTD_isError(ret)) {
-    g_printerr("zstddec: decompress failed: %s\n", ZSTD_getErrorName(ret));
-    gst_buffer_unmap(outbuf, &outmap);
-    gst_buffer_unmap(inbuf, &inmap);
-    return GST_FLOW_ERROR;
+  switch (self->format) {
+    case GST_MULTIDEC_FORMAT_ZSTD:
+#ifdef HAVE_ZSTD
+      ret = ZSTD_decompress(outmap.data, outmap.size, inmap.data, inmap.size);
+
+      if (ZSTD_isError(ret)) {
+        g_printerr("multidec: zstd decompress failed: %s\n",
+                   ZSTD_getErrorName(ret));
+        gst_buffer_unmap(outbuf, &outmap);
+        gst_buffer_unmap(inbuf, &inmap);
+        return GST_FLOW_ERROR;
+      }
+
+      gst_buffer_set_size(outbuf, ret);
+      g_print("multidec: zstd decompressed successfully: %zu bytes\n", ret);
+      break;
+#else
+      g_printerr("multidec: zstd support not built\n");
+      gst_buffer_unmap(outbuf, &outmap);
+      gst_buffer_unmap(inbuf, &inmap);
+      return GST_FLOW_ERROR;
+#endif
+
+    case GST_MULTIDEC_FORMAT_GZIP:
+#ifdef HAVE_ZLIB
+    {
+      gsize actual_size = 0;
+
+      if (!gst_multidec_gzip_decompress(inmap.data,
+                                        inmap.size,
+                                        outmap.data,
+                                        outmap.size,
+                                        &actual_size)) {
+        gst_buffer_unmap(outbuf, &outmap);
+        gst_buffer_unmap(inbuf, &inmap);
+        return GST_FLOW_ERROR;
+      }
+
+      gst_buffer_set_size(outbuf, actual_size);
+      g_print("multidec: gzip decompressed successfully: %zu bytes\n", actual_size);
+      break;
+    }
+#else
+      g_printerr("multidec: gzip support not built\n");
+      gst_buffer_unmap(outbuf, &outmap);
+      gst_buffer_unmap(inbuf, &inmap);
+      return GST_FLOW_ERROR;
+#endif
+
+    case GST_MULTIDEC_FORMAT_BZIP2:
+      g_printerr("multidec: bzip2 path not implemented yet\n");
+      gst_buffer_unmap(outbuf, &outmap);
+      gst_buffer_unmap(inbuf, &inmap);
+      return GST_FLOW_ERROR;
+
+    case GST_MULTIDEC_FORMAT_AUTO:
+    default:
+      g_printerr("multidec: auto/unknown format handling not implemented in transform yet\n");
+      gst_buffer_unmap(outbuf, &outmap);
+      gst_buffer_unmap(inbuf, &inmap);
+      return GST_FLOW_ERROR;
   }
-  
-  g_print("zstddec: decompressed successfully: %zu bytes\n", ret);
 
   gst_buffer_unmap(outbuf, &outmap);
   gst_buffer_unmap(inbuf, &inmap);
 
   return GST_FLOW_OK;
-  }
+}
 
 static void gst_multidec_class_init(GstMultiDecClass *klass)
 {
