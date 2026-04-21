@@ -17,7 +17,7 @@ typedef enum {
 } GstMultiDecFormat;
 
 typedef struct _GstMultiDec GstMultiDec;
-typedef struct _GstMultiDecClass GstZstdDecClass;
+typedef struct _GstMultiDecClass GstMultiDecClass;
 
 struct _GstMultiDec {
   GstBaseTransform parent;
@@ -29,6 +29,8 @@ struct _GstMultiDecClass {
 };
 
 GType gst_multidec_get_type(void);
+GType gst_multidec_format_get_type(void);
+
 G_END_DECLS
 
-#endif
+#endif /* __GST_MULTIDEC_H__ */
