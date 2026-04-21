@@ -62,6 +62,32 @@ static gboolean gst_multidec_gzip_decompress(const guint8 *src,
 
 #ifdef HAVE_BZIP2
 #include <bzlib.h>
+
+static gboolean
+gst_multidec_bzip2_decompress(const guint8 *src,
+                              gsize src_size,
+                              guint8 *dst,
+                              gsize dst_capacity,
+                              gsize *dst_size)
+{
+  unsigned int out_len = (unsigned int)dst_capacity;
+  int bzret;
+
+  bzret = BZ2_bzBuffToBuffDecompress((char *)dst,
+                                     &out_len,
+                                     (char *)src,
+                                     (unsigned int)src_size,
+                                     0,   /* small */
+                                     0);  /* verbosity */
+
+  if (bzret != BZ_OK) {
+    g_printerr("multidec: bzip2 decompress failed: %d\n", bzret);
+    return FALSE;
+  }
+
+  *dst_size = (gsize)out_len;
+  return TRUE;
+}
 #endif
 
 
@@ -195,6 +221,7 @@ gst_multidec_prepare_output_buffer(GstBaseTransform *base,
 
     case GST_MULTIDEC_FORMAT_BZIP2:
       g_print("multidec: format=bzip2\n");
+      self->expected_outbuf_size = MAX_DECOMPRESSED_SIZE;
 #ifdef HAVE_BZIP2
       self->expected_outbuf_size = MAX_DECOMPRESSED_SIZE;
 #else
@@ -321,10 +348,30 @@ gst_multidec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outb
 #endif
 
     case GST_MULTIDEC_FORMAT_BZIP2:
-      g_printerr("multidec: bzip2 path not implemented yet\n");
+    #ifdef HAVE_BZIP2
+    {
+      gsize actual_size = 0;
+
+      if (!gst_multidec_bzip2_decompress(inmap.data,
+                                        inmap.size,
+                                        outmap.data,
+                                        outmap.size,
+                                        &actual_size)) {
+        gst_buffer_unmap(outbuf, &outmap);
+        gst_buffer_unmap(inbuf, &inmap);
+        return GST_FLOW_ERROR;
+      }
+
+      gst_buffer_set_size(outbuf, actual_size);
+      g_print("multidec: bzip2 decompressed successfully: %zu bytes\n", actual_size);
+      break;
+    }
+    #else
+      g_printerr("multidec: bzip2 support not built\n");
       gst_buffer_unmap(outbuf, &outmap);
       gst_buffer_unmap(inbuf, &inmap);
       return GST_FLOW_ERROR;
+    #endif
 
     case GST_MULTIDEC_FORMAT_AUTO:
     default:
