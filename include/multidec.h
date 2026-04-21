@@ -13,7 +13,8 @@ typedef enum {
   GST_MULTIDEC_FORMAT_AUTO = 0,
   GST_MULTIDEC_FORMAT_ZSTD,
   GST_MULTIDEC_FORMAT_GZIP,
-  GST_MULTIDEC_FORMAT_BZIP2
+  GST_MULTIDEC_FORMAT_BZIP2,
+  GST_MULTIDEC_FORMAT_UNKNOWN
 } GstMultiDecFormat;
 
 typedef struct _GstMultiDec GstMultiDec;
@@ -22,6 +23,7 @@ typedef struct _GstMultiDecClass GstMultiDecClass;
 struct _GstMultiDec {
   GstBaseTransform parent;
   GstMultiDecFormat format;
+  GstMultiDecFormat detected_format;
   gsize expected_outbuf_size;
 };
 

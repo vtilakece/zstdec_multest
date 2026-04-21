@@ -154,9 +154,29 @@ GST_STATIC_PAD_TEMPLATE(
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS_ANY);
 
+static GstMultiDecFormat gst_multidec_detect_format(const guint8 *data, gsize size)
+{
+  if (size >= 4 &&
+      data[0] == 0x28 && data[1] == 0xB5 &&
+      data[2] == 0x2F && data[3] == 0xFD) {
+    return GST_MULTIDEC_FORMAT_ZSTD;
+  }
 
-static GstFlowReturn
-gst_multidec_prepare_output_buffer(GstBaseTransform *base,
+  if (size >= 2 &&
+      data[0] == 0x1F && data[1] == 0x8B) {
+    return GST_MULTIDEC_FORMAT_GZIP;
+  }
+
+  if (size >= 3 &&
+      data[0] == 'B' && data[1] == 'Z' && data[2] == 'h') {
+    return GST_MULTIDEC_FORMAT_BZIP2;
+  }
+  // Not matching any of the above then returns FORMAT_UNKOWN 
+  return GST_MULTIDEC_FORMAT_UNKNOWN;
+}
+
+
+static GstFlowReturn gst_multidec_prepare_output_buffer(GstBaseTransform *base,
                                    GstBuffer *inbuf,
                                    GstBuffer **outbuf)
 {
@@ -169,17 +189,19 @@ gst_multidec_prepare_output_buffer(GstBaseTransform *base,
     return GST_FLOW_ERROR;
   }
 
-  switch (self->format) {
-    case GST_MULTIDEC_FORMAT_AUTO:
-      g_print("multidec: format=auto\n");
-      /* later: detect from header */
-      gst_buffer_unmap(inbuf, &inmap);
-      g_printerr("multidec: auto detect not implemented yet\n");
-      return GST_FLOW_ERROR;
+    if (self->format == GST_MULTIDEC_FORMAT_AUTO) {
+    self->detected_format = gst_multidec_detect_format(inmap.data, inmap.size);
+    g_print("multidec: auto-detected format=%d\n", self->detected_format);
+  } else {
+    self->detected_format = self->format;
+    g_print("multidec: forced format=%d\n", self->detected_format);
+  }
 
+  switch (self->detected_format) {
     case GST_MULTIDEC_FORMAT_ZSTD:
       g_print("multidec: format=zstd\n");
-#ifdef HAVE_ZSTD
+    
+      #ifdef HAVE_ZSTD
       frame_size = ZSTD_getFrameContentSize(inmap.data, inmap.size);
 
       if (frame_size == ZSTD_CONTENTSIZE_ERROR) {
@@ -298,7 +320,7 @@ gst_multidec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outb
           gst_buffer_get_size(outbuf),
           gst_buffer_get_size(inbuf));
 
-  switch (self->format) {
+  switch (self->detected_format) {
     case GST_MULTIDEC_FORMAT_ZSTD:
 #ifdef HAVE_ZSTD
       ret = ZSTD_decompress(outmap.data, outmap.size, inmap.data, inmap.size);
@@ -440,6 +462,8 @@ static void gst_multidec_init(GstMultiDec *self)
    g_print("INSTANCE INIT pid=%d\n", getpid());
 
    self->format = GST_MULTIDEC_FORMAT_AUTO;
+   self->detected_format = GST_MULTIDEC_FORMAT_UNKNOWN;
+
    //This ensures no new buf create and or copy needed..  set_in_place as passthrough... 
 
    gst_base_transform_set_in_place(GST_BASE_TRANSFORM(self), FALSE);
@@ -456,6 +480,7 @@ GType gst_multidec_format_get_type(void)
     { GST_MULTIDEC_FORMAT_ZSTD,  "Zstandard",   "zstd"  },
     { GST_MULTIDEC_FORMAT_GZIP,  "Gzip",        "gzip"  },
     { GST_MULTIDEC_FORMAT_BZIP2, "Bzip2",       "bzip2" },
+    { GST_MULTIDEC_FORMAT_UNKNOWN, "Unknown",     "unknown" },
     { 0, NULL, NULL }
   };
   
