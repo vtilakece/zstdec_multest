@@ -18,6 +18,19 @@
 // https://facebook.github.io/zstd/zstd_manual.html for zstd decompression APIs
 #endif
 
+static const char *
+gst_multidec_format_to_string(GstMultiDecFormat fmt)
+{
+  switch (fmt) {
+    case GST_MULTIDEC_FORMAT_AUTO:   return "auto";
+    case GST_MULTIDEC_FORMAT_ZSTD:   return "zstd";
+    case GST_MULTIDEC_FORMAT_GZIP:   return "gzip";
+    case GST_MULTIDEC_FORMAT_BZIP2:  return "bzip2";
+    case GST_MULTIDEC_FORMAT_UNKNOWN:return "unknown";
+    default:                         return "invalid";
+  }
+}
+
 #ifdef HAVE_ZLIB
 #include <zlib.h>
 //See https://www.zlib.net/manual.html for zlib decompression APIs 
@@ -191,10 +204,10 @@ static GstFlowReturn gst_multidec_prepare_output_buffer(GstBaseTransform *base,
 
     if (self->format == GST_MULTIDEC_FORMAT_AUTO) {
     self->detected_format = gst_multidec_detect_format(inmap.data, inmap.size);
-    g_print("multidec: auto-detected format=%d\n", self->detected_format);
-  } else {
+    g_print("multidec: auto-detected format=%s\n", gst_multidec_format_to_string(self->detected_format));
+  } else { //This is the case when the user has set the format property to a specific format, so we will use that format for decompression without auto-detection.
     self->detected_format = self->format;
-    g_print("multidec: forced format=%d\n", self->detected_format);
+    g_print("multidec: forced format=%s\n", gst_multidec_format_to_string(self->detected_format));
   }
 
   switch (self->detected_format) {
