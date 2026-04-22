@@ -3,6 +3,10 @@
 
 set -euo pipefail
 
-export GST_PLUGIN_PATH="$PWD/build/src"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+export GST_PLUGIN_PATH="$ROOT_DIR/build/src"
+
+
+
 # This command will exit with a non-zero status if the plugin is not found, causing the test to fail
 gst-inspect-1.0 multidec | grep -q "Name[[:space:]]*multidec"
