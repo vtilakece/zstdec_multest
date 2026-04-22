@@ -9,3 +9,12 @@ project(
 )
 
 subdir('src')
+
+test(
+  'inspect-zstddec',
+  find_program('tests/test-inspect.sh')
+)
+test(
+  'decompress-zstddec',
+  find_program('tests/test-decompress.sh')
+)
