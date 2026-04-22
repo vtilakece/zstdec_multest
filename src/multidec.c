@@ -76,8 +76,7 @@ static gboolean gst_multidec_gzip_decompress(const guint8 *src,
 #ifdef HAVE_BZIP2
 #include <bzlib.h>
 
-static gboolean
-gst_multidec_bzip2_decompress(const guint8 *src,
+static gboolean gst_multidec_bzip2_decompress(const guint8 *src,
                               gsize src_size,
                               guint8 *dst,
                               gsize dst_capacity,
@@ -188,7 +187,7 @@ static GstMultiDecFormat gst_multidec_detect_format(const guint8 *data, gsize si
   return GST_MULTIDEC_FORMAT_UNKNOWN;
 }
 
-
+//This is the chain funtion where the input buffer is mapped and the otput buffer size is determined and the pointer to th buffer is returned 
 static GstFlowReturn gst_multidec_prepare_output_buffer(GstBaseTransform *base,
                                    GstBuffer *inbuf,
                                    GstBuffer **outbuf)
@@ -286,9 +285,8 @@ static GstFlowReturn gst_multidec_prepare_output_buffer(GstBaseTransform *base,
   return GST_FLOW_OK;
 }
 
-/* For now: just pass buffers through unchanged */
-static GstFlowReturn
-gst_multidec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbuf)
+/* This function does the actual decompression based on the decoded format. */
+static GstFlowReturn gst_multidec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbuf)
 {
   GstMultiDec *self = (GstMultiDec *)base;
   GstMapInfo inmap;
@@ -516,7 +514,7 @@ GST_PLUGIN_DEFINE(
     GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
     multidec,   // the plugin name for multidec 
-    "Simple multidec plugin that parses the comporessed data from zstd or  zlib or bzip file and does nothing else with it",
+    "A multidec plugin that can handle multiple compression formats with auto-detection of the format",
     plugin_init,
     "0.1.0",
     "LGPL",
