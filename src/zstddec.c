@@ -17,7 +17,7 @@
 #include <zstd.h>
 #endif
 
-/*Guard to check max decomporessed size */
+/*Guard to check max decompressed size */
 #define MAX_DECOMPRESSED_SIZE (100 * 1024 * 1024) // 100 MB
 
 G_DEFINE_TYPE(GstZstdDec, gst_zstddec, GST_TYPE_BASE_TRANSFORM)
@@ -38,8 +38,7 @@ GST_STATIC_PAD_TEMPLATE(
     GST_STATIC_CAPS_ANY);
 
 
-static GstFlowReturn
-gst_zstddec_prepare_output_buffer(GstBaseTransform *base,
+static GstFlowReturn gst_zstddec_prepare_output_buffer(GstBaseTransform *base,
                                   GstBuffer *inbuf,
                                   GstBuffer **outbuf)
 {
@@ -91,8 +90,7 @@ gst_zstddec_prepare_output_buffer(GstBaseTransform *base,
 }
 
 /* For now: just pass buffers through unchanged */
-static GstFlowReturn
-gst_zstddec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbuf)
+static GstFlowReturn gst_zstddec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbuf)
 {
   (void)(base);
   //(void)(buf);
@@ -145,10 +143,7 @@ gst_zstddec_transform(GstBaseTransform *base, GstBuffer *inbuf, GstBuffer *outbu
   }
 
 
-  
-
-static void
-gst_zstddec_class_init(GstZstdDecClass *klass)
+static void gst_zstddec_class_init(GstZstdDecClass *klass)
 {
    g_print("CLASS INIT pid=%d\n", getpid());
 
@@ -178,8 +173,7 @@ gst_zstddec_class_init(GstZstdDecClass *klass)
   trans_class->transform = gst_zstddec_transform;
 }
 
-static void
-gst_zstddec_init(GstZstdDec *self)
+static void gst_zstddec_init(GstZstdDec *self)
 {
    //g_print("INSTANCE INIT\n");
    g_print("INSTANCE INIT pid=%d\n", getpid());
@@ -191,8 +185,7 @@ gst_zstddec_init(GstZstdDec *self)
 }
 
 
-static gboolean
-plugin_init(GstPlugin *plugin)
+static gboolean plugin_init(GstPlugin *plugin)
 {
   return gst_element_register(plugin, "zstddec", GST_RANK_NONE, gst_zstddec_get_type());
 }
