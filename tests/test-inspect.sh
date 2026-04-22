@@ -9,4 +9,5 @@ export GST_PLUGIN_PATH="$ROOT_DIR/build/src"
 
 
 # This command will exit with a non-zero status if the plugin is not found, causing the test to fail
-gst-inspect-1.0 multidec | grep -q "Name[[:space:]]*multidec"
+OUTPUT="$(gst-inspect-1.0 multidec)"
+printf '%s\n' "$OUTPUT" | grep -q "Name[[:space:]]*multidec"

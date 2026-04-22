@@ -11,10 +11,10 @@ project(
 subdir('src')
 
 test(
-  'inspect-zstddec',
+  'inspect-multidec',
   find_program('tests/test-inspect.sh')
 )
 test(
-  'decompress-zstddec',
+  'decompress-multidec',
   find_program('tests/test-decompress.sh')
 )
