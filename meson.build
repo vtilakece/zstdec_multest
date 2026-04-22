@@ -1,5 +1,5 @@
 project(
-  'gstdec_multest',
+  'zstdec_multest',
   'c',
   version : '0.1.0',
   default_options : [
@@ -9,3 +9,15 @@ project(
 )
 
 subdir('src')
+
+# Register tests for CI 
+
+test(
+  'inspect-zstddec',
+  find_program('tests/test-inspect.sh')
+)
+
+test(
+  'decompress-zstddec',
+  find_program('tests/test-decompress.sh')
+)

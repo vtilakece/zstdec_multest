@@ -67,7 +67,6 @@ gst_zstddec_prepare_output_buffer(GstBaseTransform *base,
     return GST_FLOW_ERROR;
   }
    
-  frame_size_garbage = frame_size*10; // Arbitrary large size to catch suspicious frame sizes that could lead to memory issues. Adjust as needed based on expected use cases.   
   if (frame_size == 0 || frame_size > MAX_DECOMPRESSED_SIZE ) {
     g_printerr("zstddec: suspicious frame size: %llu\n", frame_size);
     gst_buffer_unmap(inbuf, &inmap);
@@ -203,7 +202,7 @@ GST_PLUGIN_DEFINE(
     GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
     zstddec,   // the plugin name GStreamer uses
-    "Simple zstddec plugin that passes the data from the compressed zstd file and does nothing else with it",
+    "Simple zstddec plugin that decodes a zstd compressed file and passes through the decompressed data. This is a test plugin for zstd decompression.",
     plugin_init,
     "0.1.0",
     "LGPL",

@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            meson ninja-build pkg-config build-essential \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libzstd-dev \
+            gstreamer1.0-tools zstd
+
+      - name: Configure
+        run: meson setup build
+
+      - name: Compile
+        run: meson compile -C build
+
+      - name: Run tests
+        run: meson test -C build --print-errorlogs
