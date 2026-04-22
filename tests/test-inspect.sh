@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export GST_PLUGIN_PATH="$PWD/build/src"
-# Exits with an error if the zstddec plugin is not found on a non zero exit code
-gst-inspect-1.0 zstddec | grep -q "Name[[:space:]]*zstddec"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+export GST_PLUGIN_PATH="$ROOT_DIR/build/src"
+# Check if the zstddec plugin is available and exits if non zero status is returned
+OUTPUT="$(gst-inspect-1.0 zstddec)"
+printf '%s\n' "$OUTPUT" | grep -q "Name[[:space:]]*zstddec"
